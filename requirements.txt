@@ -1,0 +1,42 @@
+# Core
+pandas>=2.1
+tqdm==4.65.0
+
+# Add pkgs required by VS Code
+jupyter
+ipykernel
+
+
+
+
+
+# Regression
+scikit-learn
+
+# Visualisation
+seaborn
+matplotlib>=3.7
+plotly
+altair>=5
+nbformat>=4.2.0
+streamlit
+dash
+tabulate
+plotnine>0.12
+
+# SQL
+jupysql>=0.10.4
+sqlalchemy>=2.0.23
+torch>=2
+transformers>=4.39
+
+psycopg2-binary # For PostgreSQL
+
+# Web-Scraping and API Requests
+scrapy
+httpx
+parsel
+jmespath
+
+# Decoding/Reading in Files
+unidecode
