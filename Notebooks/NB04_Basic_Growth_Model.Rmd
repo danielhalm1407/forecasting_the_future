@@ -1,0 +1,93 @@
+
+#===Preamble===#
+
+
+```{r}
+# Clear environment of variables
+#rm(list = ls())
+``` 
+
+## Import Packages
+```{r}
+# Directory Access
+library(rstudioapi) # to change the working directory respectively
+
+# Data Manipulation
+library(jsonlite)# for reading in json data and credentials to the purpose-built database
+library(dplyr) # to clean data
+
+# Plotting and Visualisation
+library(ggplot2) # to plot nice histograms
+library(grid) # for more plotting interaction
+library(zoo) # for time series plotting
+library(patchwork) # for combining figures
+library(xtable) # to write out tables into latex
+
+
+# Database Access
+library(DBI)
+library(RPostgres)
+
+```
+
+
+
+## Set up the right path
+```{r}
+# Get the path of the current script
+current_file_path <- rstudioapi::getActiveDocumentContext()$path
+# Extract the directory from the file path
+current_file_dir <- dirname(current_file_path)
+# Set the current working directory to the directory of the current file
+setwd(current_file_dir)
+```
+
+## Database
+
+###  Get the credentials which allow us access to the database
+
+```{r}
+# Build the path to the JSON credentials file (1 level up)
+credentials_file_path <- file.path(current_file_dir, '..', 'supabase_credentials.json')
+
+# Read the JSON file
+credentials <- fromJSON(credentials_file_path)
+```
+
+
+
+### Call in the source file that allows access to the database
+
+```{r}
+# Call in the source file that allows access to the database
+source("../src/macro_utils/sql_queries.R")
+```
+
+
+
+
+```{r}
+# Establish connection to the database
+con <- get_supabase_connection(
+  user = "postgres",
+  password = credentials$password,
+  host = credentials$host,
+  port = 5432,
+  database = "postgres"
+)
+
+
+```
+
+```{r}
+# Extract the data of interest
+test_data <- dbGetQuery(con, "SELECT * FROM test_data")
+```
+
+```{r}
+test_data
+```
+
+
+
+

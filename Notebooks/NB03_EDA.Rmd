@@ -1,0 +1,411 @@
+---
+title: "NB03_EDA_Continued"
+output: html_document
+---
+
+#===Preamble===#
+
+
+```{r}
+# Clear environment of variables
+#rm(list = ls())
+``` 
+
+## Import Packages
+```{r}
+# Directory Access
+library(rstudioapi) # to change the working directory respectively
+
+# Data Manipulation
+library(jsonlite)# for reading in json data and credentials to the purpose-built database
+library(dplyr) # to clean data
+
+# Plotting and Visualisation
+library(ggplot2) # to plot nice histograms
+library(grid) # for more plotting interaction
+library(zoo) # for time series plotting
+library(patchwork) # for combining figures
+library(xtable) # to write out tables into latex
+library(viridisLite)  # For viridis color palette
+
+
+# Database Access
+library(DBI)
+library(RPostgres)
+
+```
+
+
+
+## Set up the right path
+```{r}
+# Get the path of the current script
+current_file_path <- rstudioapi::getActiveDocumentContext()$path
+# Extract the directory from the file path
+current_file_dir <- dirname(current_file_path)
+# Set the current working directory to the directory of the current file
+setwd(current_file_dir)
+```
+
+## Database
+
+###  Get the credentials which allow us access to the database
+
+```{r}
+# Build the path to the JSON credentials file (1 level up)
+credentials_file_path <- file.path(current_file_dir, '..', 'supabase_credentials.json')
+
+# Read the JSON file
+credentials <- fromJSON(credentials_file_path)
+```
+
+
+
+### Call in the source file that allows access to the database
+
+```{r}
+# Call in the source file that allows access to the database
+source("../src/macro_utils/sql_queries.R")
+```
+
+
+
+
+```{r}
+# Establish connection to the database
+con <- get_supabase_connection(
+  user = "postgres",
+  password = credentials$password,
+  host = credentials$host,
+  port = 5432,
+  database = "postgres"
+)
+
+
+```
+
+### Load the Data
+
+```{r}
+# Extract the data of interest
+plot_data <- dbGetQuery(con, "SELECT * FROM growth_data")
+```
+
+```{r}
+plot_data
+```
+
+### Post Database Extraction Data Cleaning
+
+```{r}
+# Convert the date to date format
+plot_data$date <- as.Date(plot_data$date)
+
+
+# Sort the data by country and date
+plot_data <- plot_data %>%
+  arrange(country, date)
+
+# Add GFC and COVID indicator columns
+plot_data <- plot_data %>%
+  mutate(
+    gfc = date >= as.Date("2008-06-01") & date <= as.Date("2009-12-31"),
+    covid = date >= as.Date("2019-12-01") & date <= as.Date("2021-12-31")
+  )
+```
+
+### Visualise the different time series for different groupings (countries)
+
+
+#### Additional Data Cleaning for Plotting Purposes Only
+
+```{r}
+# Convert GDP (PPP) to billions for better readability
+plot_data <- plot_data %>%
+  mutate(
+    gdp_ppp = gdp_ppp / 1e9,       # GDP in billions
+    labour_force = labour_force / 1e6  # Labour force in millions
+  )
+
+
+```
+
+```{r}
+# Calculate min and max date for each aggregate shock period (GFC and COVID)
+# Create a named list of period labels and their associated logical columns
+periods <- list(GFC = "gfc", COVID = "covid")
+
+# Create a data frame of shock periods
+shock_ranges <- bind_rows(lapply(names(periods), function(label) {
+  indicator <- periods[[label]]
+  data_subset <- plot_data %>% filter(.data[[indicator]])
+  
+  if (nrow(data_subset) > 0) {
+    tibble(
+      period = label,
+      xmin = min(data_subset$date, na.rm = TRUE),
+      xmax = max(data_subset$date, na.rm = TRUE)
+    )
+  } else {
+    tibble(
+      period = label,
+      xmin = as.Date(NA),
+      xmax = as.Date(NA)
+    )
+  }
+}))
+
+# Create A colour mapping for these shock periods
+shock_fill_mapping <- c(
+  GFC = "#0457db",    # orange
+  COVID = "#87CEEB"   # light blue
+)
+```
+```{r}
+shock_ranges
+```
+
+#### Setup the Plotting Environment (Colour Mappings, X axis breaks etc)
+
+```{r}
+# 1. Get unique countries
+countries <- unique(plot_data$country)
+num_countries <- length(countries)
+
+# 2. Generate a color palette using viridis and convert to HEX
+# viridisLite::viridis returns HEX by default
+color_palette <- viridisLite::viridis(num_countries)
+
+# 3. Map colors to countries
+# Create a named vector where names are country names and values are HEX colors
+color_mapping <- setNames(color_palette, countries)
+```
+```{r, eval=F}
+color_mapping
+```
+
+
+```{r}
+# 1. Select relevant columns and remove duplicates
+label_df <- plot_data %>%
+  select(date, year) %>%
+  distinct() %>%
+  arrange(date)
+
+# 2. Choose every 2nd row (adjust the step size as needed)
+label_df_filtered <- label_df[seq(1, nrow(label_df), by = 2), ]
+
+# 3. Extract breaks and labels
+yq_breaks <- label_df_filtered$date
+yq_labels <- label_df_filtered$year
+```
+
+### Plot Key Data Series
+
+```{r}
+# Filter only the countries of interest for illustrative purposes
+plot_data <- plot_data %>%
+  filter(country %in% c("United States", "Germany", "Japan"))
+```
+
+```{r}
+# Get range of each variable
+range_primary <- range(plot_data$gdp_ppp, na.rm = TRUE)
+range_secondary <- range(plot_data$labour_force, na.rm = TRUE)
+
+# Rescale labour_force to match the GDP scale
+plot_data <- plot_data %>%
+  mutate(labour_force_rescaled = (labour_force - range_secondary[1]) / diff(range_secondary) * diff(range_primary) + range_primary[1])
+```
+
+
+```{r}
+# Create the plot
+g <- ggplot(plot_data, aes(x = date)) +
+  
+  # GDP Lines per country
+  geom_line(aes(y = gdp_ppp, color = country), linewidth = 1) +
+
+  # Labour Force Lines (dashed) per country
+  geom_line(aes(y = labour_force_rescaled, color = country), linetype = "dashed", linewidth = 1) +
+  
+  # Add shaded rectangles for shock periods
+  geom_rect(
+    data = shock_ranges,
+    inherit.aes = FALSE,
+    aes(xmin = xmin, xmax = xmax, ymin = -Inf, ymax = Inf, fill = period),
+    alpha = 0.15
+  ) +
+  
+  # SUPPORT 2 AXES
+  # Primary y-axis
+  scale_y_continuous(
+    name = "GDP (PPP, USD Billions)",
+
+    # Secondary axis transformation
+    sec.axis = sec_axis(
+        transform = ~ (.-range_primary[1]) / diff(range_primary) * diff(range_secondary) + range_secondary[1],
+        name = "Labour Force (Millions)"
+      )
+  ) +
+  
+  # Use same color mapping
+  scale_color_manual(name = "Country", values = color_mapping) +
+  
+  # Manually assign fill colors for shock periods
+  scale_fill_manual(name = "Shock Period", values = shock_fill_mapping) +
+  
+  # Custom x-axis breaks and labels
+  scale_x_date(breaks = yq_breaks, labels = yq_labels) +
+  
+  # Add titles and axis labels
+  labs(
+    title = "Key Data Comparison Across Countries",
+    x = "Year",
+    color = "Country"
+  ) +
+  
+  # Add white Background
+  theme_minimal() +
+  # Rotate x-axis text
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 0.5)
+  ) +
+  
+  # Remove linetype guide
+  guides(linetype = "none")
+
+print(g)
+```
+
+```{r}
+plot_dual_axis_comparison <- function(
+  df,
+  countries,
+  primary_var,
+  secondary_var,
+  primary_label = "Primary Variable",
+  secondary_label = "Secondary Variable",
+  y_title = "Year",
+  two_axes = T
+) {
+  # -------------------------
+  # Filter for selected countries
+  # -------------------------
+  df <- df %>%
+    filter(country %in% countries)
+
+  # -------------------------
+  # Capture data ranges
+  # -------------------------
+  range_primary <- range(df[[primary_var]], na.rm = TRUE)
+  range_secondary <- range(df[[secondary_var]], na.rm = TRUE)
+
+  # -------------------------
+  # Rescale secondary variable to match primary axis
+  # -------------------------
+  df <- df %>%
+    mutate(
+      secondary_rescaled = (.[[secondary_var]] - range_secondary[1]) / diff(range_secondary) * 
+                           diff(range_primary) + range_primary[1]
+    )
+
+  # -------------------------
+  # Build long-format data with `measure` column for linetype mapping
+  # -------------------------
+  df_primary <- df %>%
+    mutate(value = .[[primary_var]], measure = primary_label)
+
+  df_secondary <- df %>%
+    mutate(value = secondary_rescaled, measure = secondary_label)
+
+  df_long <- bind_rows(df_primary, df_secondary)
+  
+  # Create the y-axis scale depending on whether two_axes is TRUE
+  y_axis_scale <- if (two_axes) {
+    scale_y_continuous(
+      name = primary_label,
+      sec.axis = sec_axis(
+        trans = ~ (.-range_primary[1]) / diff(range_primary) * diff(range_secondary) + range_secondary[1],
+        name = secondary_label
+      )
+    )
+  } else {
+    scale_y_continuous(name = primary_label)
+  }
+
+  # -------------------------
+  # Generate color mapping per country using viridis palette
+  # -------------------------
+  country_list <- unique(df$country)
+  num_countries <- length(country_list)
+  color_palette <- scales::viridis_pal()(num_countries)
+  color_mapping <- setNames(color_palette, country_list)
+  
+  # Create named vector for linetype mapping
+  linetype_mapping <- setNames(c("solid", "dashed"), c(primary_label, secondary_label))
+
+
+  # -------------------------
+  # Build the ggplot
+  # -------------------------
+  g <- ggplot(df_long, aes(x = date, y = value, color = country, linetype = measure)) +
+
+    # Line plot for both measures
+    geom_line(linewidth = 1) +
+
+    # Optional: Add shaded rectangles for known shock periods
+    geom_rect(
+      data = shock_ranges,
+      inherit.aes = FALSE,
+      aes(xmin = xmin, xmax = xmax, ymin = -Inf, ymax = Inf, fill = period),
+      alpha = 0.15
+    ) +
+
+    # Y-axis scale (optionally dual)
+    y_axis_scale +
+    
+
+    # Apply color and fill mappings
+    scale_color_manual(name = "Country", values = color_mapping) +
+    scale_fill_manual(name = "Shock Period", values = shock_fill_mapping) +
+
+    # Manual legend for linetype
+    scale_linetype_manual(
+    name = "Measure",
+    values = linetype_mapping
+    ) +
+
+    # Custom x-axis ticks
+    scale_x_date(breaks = yq_breaks, labels = yq_labels) +
+
+    # Labels and theme
+    labs(
+      title = paste(primary_label, "and", secondary_label, "Comparison"),
+      x = y_title
+    ) +
+
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(angle = 90, hjust = 0.5)
+    )
+
+  return(g)
+}
+
+```
+```{r, fig.width=16, fig.height = 6}
+g<- plot_dual_axis_comparison(
+  df = plot_data,
+  countries = c("United States", "Germany", "Japan"),
+  primary_var = "gdp_ppp",
+  secondary_var = "labour_force",
+  primary_label = "GDP (PPP, USD Billions)",
+  secondary_label = "Labour Force (Millions)",
+  two_axes = T
+)
+print(g)
+```
+
+
+

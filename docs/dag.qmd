@@ -1,0 +1,61 @@
+
+---
+title: "Quarto Basics"
+format:
+  html:
+    code-fold: true
+self-contained: true
+---
+
+
+```{mermaid}
+graph TD;
+
+    %% Trade Policy Shock
+    A["Modern Mercantilism <br/> (Tariffs, Reshoring)"]:::policy;
+
+
+  %% Real Economy
+  A --> B[Higher Input Costs]:::real;
+  B --> C[Reduced Investment]:::real;
+  C --> D[Lower Productivity Growth]:::real; 
+  D --> E[Slower GDP Growth]:::real;
+
+  %% Prices
+  B --> F[Domestic Price Pressures]:::price;
+  F --> G[Higher Inflation]:::price;
+
+  %% Fiscal/Financial Effects
+  E --> H[Weaker Tax Base]:::fiscal;
+  H --> I[Higher Deficits]:::fiscal;
+  I --> J[Rising Public Debt]:::fiscal;
+
+  %% External Sector
+  A --> K[Lower Trade Volumes]:::external;
+  K --> L[Supply Chain Reorientation]:::external;
+  L --> M[Regional Trade Blocs]:::external;
+  M --> N[Fragmented Capital Markets]:::external;
+
+  %% Feedback Loop
+  G --> O[Tighter Monetary Policy]:::financial;
+  O --> P[Slower Credit Growth]:::financial;
+  P --> Q[Financial Stability Risks]:::financial;
+  Q --> E;
+
+  %% Class Definitions
+  classDef policy fill:#fde68a,stroke:#f59e0b,stroke-width:2px;
+  classDef real fill:#bfdbfe,stroke:#3b82f6,stroke-width:2px;
+  classDef price fill:#fecaca,stroke:#ef4444,stroke-width:2px;
+  classDef fiscal fill:#ddd6fe,stroke:#8b5cf6,stroke-width:2px;
+  classDef external fill:#d1fae5,stroke:#10b981,stroke-width:2px;
+  classDef financial fill:#fcd34d,stroke:#b45309,stroke-width:2px;
+
+  %% Apply Classes
+  class A policy;
+  class B,C,D,E real;
+  class F,G price;
+  class H,I,J fiscal;
+  class K,L,M,N external;
+  class O,P,Q financial;
+```
+

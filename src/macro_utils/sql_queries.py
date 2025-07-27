@@ -3,6 +3,7 @@ from sqlalchemy import inspect, text
 import logging
 import os
 import sys
+import pandas as pd
 
 #Getting the engine
 
@@ -108,13 +109,6 @@ CREATE TABLE IF NOT EXISTS ts_data (
 
 # drop the table if needed
 DROP_TS_TABLE_SQL_QUERY = "DROP TABLE IF EXISTS ts_data;"
-
-# get the standalone rightmove data
-GET_RIGHTMOVE_DATA_SQL_QUERY = """
-SELECT  
-    *
-FROM rightmove_data
-"""
 
 # get the properties data with additional data like travel times etc
 GET_TS_DATA_SQL_QUERY = """
