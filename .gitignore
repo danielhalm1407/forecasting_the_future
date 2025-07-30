@@ -210,5 +210,7 @@ __marimo__/
 ## Ignore data that i have added to the repository
 .DS_Store
 *credentials*
+*Practice*
+*help*
 data/
 .vscode/
